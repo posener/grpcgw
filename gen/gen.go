@@ -17,6 +17,10 @@ func main() {
 	flag.Parse()
     protos := flag.Args()
 
+    if len(protos) == 0 {
+        log.Fatal("No proto files provided")
+    }
+
     includes := getIncludes()
 
     cmds := []*exec.Cmd{}
