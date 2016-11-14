@@ -9,6 +9,7 @@ import (
     "path/filepath"
 
 	"github.com/posener/grpcgw/gen/swagger"
+	_ "github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api"
 )
 
 func main() {
