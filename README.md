@@ -16,7 +16,7 @@ files:
 
 ## Install
 
-`go get -u https://github.com/posener/grpcgw/gen`
+`go get -u github.com/posener/grpcgw/gen`
 
 ## Usage
 
