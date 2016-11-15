@@ -1,12 +1,12 @@
 package swagger
 
 import (
-	"path/filepath"
-	"os"
-	"log"
 	"fmt"
-	"strings"
 	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 func GenerateSwaggerGoFile(swaggerOutFile string) {
@@ -31,11 +31,11 @@ func GenerateSwaggerGoFile(swaggerOutFile string) {
 	out.Write([]byte("}\n"))
 }
 
-func generateSwaggerGoEachFile (out *os.File) filepath.WalkFunc {
-	return func (path string, info os.FileInfo, err error) error {
+func generateSwaggerGoEachFile(out *os.File) filepath.WalkFunc {
+	return func(path string, info os.FileInfo, err error) error {
 		if strings.HasSuffix(path, ".json") {
 			log.Printf("Processing %s", path)
-			name  := filepath.Base(filepath.Dir(path))
+			name := filepath.Base(filepath.Dir(path))
 			out.Write([]byte("\"" + name + "\": `"))
 			f, _ := os.Open(path)
 			io.Copy(out, f)

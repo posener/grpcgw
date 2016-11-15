@@ -1,2 +1,4 @@
 bin/
 .idea/
+swagger-ui/
+certs/
