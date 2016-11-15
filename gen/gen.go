@@ -17,6 +17,8 @@ func main() {
 	flag.Parse()
 	protos := flag.Args()
 
+	checkProtoc()
+
 	if len(protos) == 0 {
 		log.Fatal("No proto files provided")
 	}
@@ -75,6 +77,18 @@ func generateGateway(proto string, includes []string) *exec.Cmd {
 		log.Panicf("Failed running protoc gateway: %s", err)
 	}
 	return cmd
+}
+
+func checkProtoc() {
+	cmd := exec.Command("which", "protoc")
+	err := cmd.Start()
+	if err != nil {
+		log.Print("Could not 'which protoc'")
+	}
+	err = cmd.Wait()
+	if err != nil {
+		log.Panic("please install 'protoc'")
+	}
 }
 
 func getIncludes() []string {
