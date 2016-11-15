@@ -24,6 +24,7 @@ func AddCommands(rootCmd *cobra.Command, service Service) {
 	serveCmd.Flags().BoolVar(&noAPICallsLogging, "no-api-log", false, "Don't log API calls")
 	serveCmd.Flags().StringVar(&s.KeyFile, "key", "", "Private key file")
 	serveCmd.Flags().StringVar(&s.CertFile, "crt", "", "CA Certificate file")
+	serveCmd.Flags().StringVar(&s.SwaggersPath, "swaggers", "", "A directory containing swagger files")
 	rootCmd.AddCommand(serveCmd)
 
 	Client = client{}

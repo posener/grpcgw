@@ -2,8 +2,6 @@ package grpcgw
 
 import (
 	"crypto/tls"
-	"fmt"
-	"io"
 	"log"
 	"mime"
 	"net"
@@ -11,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	assetfs "github.com/philips/go-bindata-assetfs"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -20,6 +17,8 @@ import (
 
 	"github.com/justinas/alice"
 	"io/ioutil"
+	"path/filepath"
+	"github.com/philips/go-bindata-assetfs"
 )
 
 type server struct {
@@ -29,6 +28,7 @@ type server struct {
 	Swagger    map[string]string
 	KeyFile    string
 	CertFile   string
+	SwaggersPath string
 }
 
 func NewServer(service Service) *server {
@@ -51,13 +51,6 @@ func Serve(s *server) {
 	grpcServer := grpc.NewServer(options...)
 
 	log.Print("Initializing static pages server...")
-	mux := http.NewServeMux()
-	for name, body := range s.Swagger {
-		mux.HandleFunc(fmt.Sprintf("/%s.json", name), func(w http.ResponseWriter, req *http.Request) {
-			io.Copy(w, strings.NewReader(body))
-		})
-	}
-
 	gwmux := runtime.NewServeMux()
 
 	log.Print("Registering server endpoints...")
@@ -70,8 +63,9 @@ func Serve(s *server) {
 		log.Panicf("Failed registering: %v", err)
 	}
 
+	mux := http.NewServeMux()
 	mux.Handle("/", gwmux)
-	serveSwagger(mux)
+	addSwaggerUIHandlers(s, mux)
 
 	log.Print("Starting to listen...")
 	conn, err := net.Listen("tcp", s.Address)
@@ -89,7 +83,7 @@ func Serve(s *server) {
 	err = srv.Serve(tls.NewListener(conn, srv.TLSConfig))
 
 	if err != nil {
-		log.Panicf("ListenAndServe failed: ", err)
+		log.Panicf("ListenAndServe failed: %s", err)
 	}
 
 	return
@@ -118,17 +112,23 @@ func getHandler(r *http.Request, grpcServer *grpc.Server, otherHandler http.Hand
 	}
 }
 
-func serveSwagger(mux *http.ServeMux) {
+func addSwaggerUIHandlers(s *server, mux *http.ServeMux) {
 	mime.AddExtensionType(".svg", "image/svg+xml")
-
-	// Expose files in swagger-ui/ dir on <host>/swagger-ui
-	fileServer := http.FileServer(&assetfs.AssetFS{
+    uiServer := http.FileServer(&assetfs.AssetFS{
 		Asset:    Asset,
 		AssetDir: AssetDir,
 		Prefix:   "swagger-ui",
 	})
 	prefix := "/swagger-ui/"
-	mux.Handle(prefix, http.StripPrefix(prefix, fileServer))
+	mux.Handle(prefix, http.StripPrefix(prefix, uiServer))
+
+	path, err := filepath.Abs(s.SwaggersPath)
+	if err != nil {
+		log.Panic("Failed calculating absoulute path of swagger directory")
+	}
+	jsonServer := http.FileServer(http.Dir(path))
+	prefix = "/swaggers/"
+	mux.Handle(prefix, http.StripPrefix(prefix, jsonServer))
 }
 
 func (s *server)checkSecure() {

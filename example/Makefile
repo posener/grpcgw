@@ -1,6 +1,6 @@
 all: build
 
-CMD:=bin/exmaple
+CMD:=bin/example
 
 deps:
 	go get ./...
@@ -30,13 +30,16 @@ certs/server.pem: certs/server.key
 	@echo "For 'Common Name' use 'localhost:10000'"
 	openssl req -new -x509 -key $< -out $@ -days 3650
 
+clean:
+	rm -rf bin certs swaggers
+
 # Testing targets:
 # run will start a server
 # run-client-echo will start a client and send an
 # echo message to the server
 
 run: $(CMD) certs
-	$(CMD) serve --key certs/server.key --crt certs/server.pem
+	$(CMD) serve --key certs/server.key --crt certs/server.pem --swaggers ./swagger
 
 run-client-echo: $(CMD) certs
 	$(CMD) send --crt certs/server.pem echo hi
