@@ -27,8 +27,8 @@ type server struct {
 	Address    string
 	Middleware alice.Chain
 	Swagger    map[string]string
-	KeyFile string
-	CertFile string
+	KeyFile    string
+	CertFile   string
 }
 
 func NewServer(service Service) *server {

@@ -22,11 +22,11 @@ func AddCommands(rootCmd *cobra.Command, service Service) {
 	serveCmd := newServeCommand(s)
 	serveCmd.Flags().StringVarP(&s.Address, "address", "a", defaultAddress, "Listen address")
 	serveCmd.Flags().BoolVar(&noAPICallsLogging, "no-api-log", false, "Don't log API calls")
-	serveCmd.Flags().StringVar(&s.KeyFile, "key", "certs/server.key", "Private key file")
-	serveCmd.Flags().StringVar(&s.CertFile, "cert", "certs/server.pem", "Certificate file")
+	serveCmd.Flags().StringVar(&s.KeyFile, "key", "", "Private key file")
+	serveCmd.Flags().StringVar(&s.CertFile, "crt", "", "CA Certificate file")
 	rootCmd.AddCommand(serveCmd)
 
-	SendCmd.Flags().StringVarP(&Address, "address", "a", defaultAddress, "Listen address")
+	SendCmd.Flags().StringVarP(&Address, "url", "u", defaultAddress, "Listen address")
 	rootCmd.AddCommand(SendCmd)
 }
 
