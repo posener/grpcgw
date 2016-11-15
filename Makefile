@@ -1,4 +1,4 @@
-all: grpcgw/swaggerui.go certs/server.pem
+all: grpcgw/swaggerui.go
 
 fmt:
 	go fmt ./...
@@ -14,15 +14,6 @@ swagger-ui:
 	unzip /tmp/swagger-ui.zip swagger-ui-*/dist/* -d $@
 	mv swagger-ui/swagger-ui-*/dist/* swagger-ui/
 	rm -r swagger-ui/swagger-ui-*
-
-certs: certs/server.pem
-
-certs/server.key:
-	mkdir -p certs
-	openssl genrsa -out $@ 2048
-
-certs/server.pem: certs/server.key
-	openssl req -new -x509 -key $< -out $@ -days 3650
 
 clean:
 	rm -r grpcgw/swaggerui.go swagger-ui
