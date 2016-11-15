@@ -1,7 +1,19 @@
-# grpcgw/gen tool
+# grpcgw
 
-A convinience tool, wrapper of
-[grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
+References:
+
+* [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway)
+* CoreOS blog post [Take a REST with HTTP/2, Protobufs, and Swagger](https://coreos.com/blog/gRPC-protobufs-swagger.html)
+* Phillip's [grpc gateway example](https://github.com/philips/grpc-gateway-example)
+
+This is a convenience library and code-generation tool for
+creating a grpc server with a REST gateway and Swagger-ui
+description from `proto` files.
+
+## grpcgw/grpcgw
+
+## grpcgw/gen
+
 This script easily creates from a `proto` file the following
 files:
 
@@ -14,10 +26,10 @@ files:
   file which described the REST endpoints. This file is to
   be used with the swagger-ui service.
 
-## Install
+### Install
 
 `go get -u github.com/posener/grpcgw/gen`
 
-## Usage
+### Usage
 
 `gen -swagger-out <swagger go file> <proto file> [<proto file>...]`
