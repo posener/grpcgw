@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	Address           string
 	noAPICallsLogging bool
+	Client client
 )
 
 const (
@@ -26,7 +26,10 @@ func AddCommands(rootCmd *cobra.Command, service Service) {
 	serveCmd.Flags().StringVar(&s.CertFile, "crt", "", "CA Certificate file")
 	rootCmd.AddCommand(serveCmd)
 
-	SendCmd.Flags().StringVarP(&Address, "url", "u", defaultAddress, "Listen address")
+	Client = client{}
+	SendCmd.PersistentFlags().StringVarP(&Client.Address, "url", "u", defaultAddress, "Listen address")
+	SendCmd.PersistentFlags().StringVar(&Client.CertFile, "crt", "", "CA Certificate file")
+	SendCmd.PersistentFlags().BoolVar(&Client.Insecure, "insecure", false, "Use insecure connection")
 	rootCmd.AddCommand(SendCmd)
 }
 

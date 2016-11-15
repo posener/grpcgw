@@ -41,20 +41,14 @@ func Serve(s *server) {
 
 	log.Print("Loading server certificates...")
 
-	options := []grpc.ServerOption{}
-
-	certPool := s.createCertPool()
-
-	if certPool != nil {
-		log.Print("Starting secure GRPC server")
-		options = append(options, grpc.Creds(credentials.NewClientTLSFromCert(certPool, s.Address)))
-	} else {
-		log.Print("Starting insecure GRPC server")
-	}
-	grpcServer := grpc.NewServer(options...)
+	s.checkSecure()
 
 	ctx := context.Background()
+	certPool := s.createCertPool()
 
+	log.Print("Starting secure GRPC server")
+	options := []grpc.ServerOption{grpc.Creds(credentials.NewClientTLSFromCert(certPool, s.Address))}
+	grpcServer := grpc.NewServer(options...)
 
 	log.Print("Initializing static pages server...")
 	mux := http.NewServeMux()
@@ -68,15 +62,12 @@ func Serve(s *server) {
 
 	log.Print("Registering server endpoints...")
 
-	dialOptions := []grpc.DialOption{}
-	if certPool != nil {
-		dcreds := credentials.NewTLS(&tls.Config{ServerName: s.Address, RootCAs: certPool})
-		dialOptions = append(dialOptions, grpc.WithTransportCredentials(dcreds))
-	}
+
+	dialCreds := credentials.NewTLS(&tls.Config{ServerName: s.Address, RootCAs: certPool})
+	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(dialCreds)}
 	err = register(s, ctx, grpcServer, gwmux, s.Address, dialOptions)
 	if err != nil {
-		log.Printf("serve: %v", err)
-		return
+		log.Panicf("Failed registering: %v", err)
 	}
 
 	mux.Handle("/", gwmux)
@@ -85,27 +76,20 @@ func Serve(s *server) {
 	log.Print("Starting to listen...")
 	conn, err := net.Listen("tcp", s.Address)
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
 
 	handler := s.Middleware.Then(grpcHandlerFunc(s, grpcServer, mux))
 
-	certificates := []tls.Certificate{}
-	if certificate := s.createCertificate(); certificate != nil {
-		certificates = append(certificates, *certificate)
-	}
-
-	srv := &http.Server{
-		Addr:    s.Address,
-		Handler: handler,
-		TLSConfig: &tls.Config{Certificates: certificates, NextProtos: []string{"h2"}},
-	}
+	certificates := []tls.Certificate{s.createCertificate()}
+	tlsConfig := tls.Config{Certificates: certificates, NextProtos: []string{"h2"}}
+	srv := &http.Server{Addr: s.Address, Handler: handler, TLSConfig: &tlsConfig}
 
 	log.Printf("Grpc is ready on: %s", s.Address)
 	err = srv.Serve(tls.NewListener(conn, srv.TLSConfig))
 
 	if err != nil {
-		log.Fatal("ListenAndServe failed: ", err)
+		log.Panicf("ListenAndServe failed: ", err)
 	}
 
 	return
@@ -147,17 +131,16 @@ func serveSwagger(mux *http.ServeMux) {
 	mux.Handle(prefix, http.StripPrefix(prefix, fileServer))
 }
 
-func (s *server)isInsecure() bool {
-	return s.CertFile == "" || s.KeyFile == ""
+func (s *server)checkSecure() {
+	if s.CertFile == "" || s.KeyFile == "" {
+		log.Fatal("Must provide a key and certificate to run server")
+	}
 }
 
 func (s *server)createCertPool() *x509.CertPool{
-	if s.isInsecure() {
-		return nil
-	}
 	cert, err := ioutil.ReadFile(s.CertFile)
 	if err != nil {
-		log.Panicf("Failed reading cert from %s: %s", s.CertFile, err)
+		log.Fatalf("Failed reading cert from %s: %s", s.CertFile, err)
 	}
 	certPool := x509.NewCertPool()
 	ok := certPool.AppendCertsFromPEM(cert)
@@ -167,13 +150,10 @@ func (s *server)createCertPool() *x509.CertPool{
 	return certPool
 }
 
-func (s *server)createCertificate() *tls.Certificate {
-	if s.isInsecure() {
-		return nil
-	}
+func (s *server)createCertificate() tls.Certificate {
 	keyPair, err := tls.LoadX509KeyPair(s.CertFile, s.KeyFile)
 	if err != nil {
 		log.Panicf("Failed loading key-pair from files %s, %s: %s", s.CertFile, s.KeyFile, err)
 	}
-	return &keyPair
+	return keyPair
 }

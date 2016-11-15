@@ -6,13 +6,33 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
+	"io/ioutil"
+	"log"
 )
 
-func NewGRPCConnection(addr string, credsPool *x509.CertPool) *grpc.ClientConn {
+type client struct {
+	Address string
+	CertFile string
+	Insecure bool
+}
+
+func NewGRPCConnection() *grpc.ClientConn {
 	var opts []grpc.DialOption
-	creds := credentials.NewClientTLSFromCert(credsPool, addr)
-	opts = append(opts, grpc.WithTransportCredentials(creds))
-	conn, err := grpc.Dial(addr, opts...)
+	if Client.CertFile != "" {
+		cert, err := ioutil.ReadFile(Client.CertFile)
+		if err != nil {
+			log.Fatalf("Failed reading pem file %s", Client.CertFile)
+		}
+		certPool := x509.NewCertPool()
+		certPool.AppendCertsFromPEM(cert)
+		creds := credentials.NewClientTLSFromCert(certPool, Client.Address)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		if Client.Insecure {
+			opts = append(opts, grpc.WithInsecure())
+		}
+	}
+	conn, err := grpc.Dial(Client.Address, opts...)
 	if err != nil {
 		grpclog.Fatalf("fail to dial: %v", err)
 	}
