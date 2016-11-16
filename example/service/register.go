@@ -1,3 +1,4 @@
+// Methods used to implement the grpcgw.Service interface
 package example
 
 import (
