@@ -53,8 +53,10 @@ func Serve(s *server) {
 	log.Print("Initializing static pages server...")
 	gwmux := runtime.NewServeMux()
 
-	log.Print("Registering server endpoints...")
+	mux := http.NewServeMux()
+	mux.Handle("/", gwmux)
 
+	log.Print("Registering server endpoints...")
 
 	dialCreds := credentials.NewTLS(&tls.Config{ServerName: s.Address, RootCAs: certPool})
 	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(dialCreds)}
@@ -63,8 +65,6 @@ func Serve(s *server) {
 		log.Panicf("Failed registering: %v", err)
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("/", gwmux)
 	addSwaggerUIHandlers(s, mux)
 
 	log.Print("Starting to listen...")
@@ -113,6 +113,9 @@ func getHandler(r *http.Request, grpcServer *grpc.Server, otherHandler http.Hand
 }
 
 func addSwaggerUIHandlers(s *server, mux *http.ServeMux) {
+	if s.SwaggersPath == "" {
+		return
+	}
 	mime.AddExtensionType(".svg", "image/svg+xml")
     uiServer := http.FileServer(&assetfs.AssetFS{
 		Asset:    Asset,
