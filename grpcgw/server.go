@@ -35,56 +35,51 @@ func NewServer(service Service) *server {
 	return &server{Service: service, Middleware: alice.Chain{}}
 }
 
-func Serve(s *server) {
-
+func Serve(s *server, ctx context.Context) {
 	var err error
 
-	log.Print("Loading server certificates...")
-
 	s.checkSecure()
-
-	ctx := context.Background()
 	certPool := s.createCertPool()
-
-	log.Print("Starting secure GRPC server")
 	options := []grpc.ServerOption{grpc.Creds(credentials.NewClientTLSFromCert(certPool, s.Address))}
-	grpcServer := grpc.NewServer(options...)
+	grpcHandler := grpc.NewServer(options...)
 
-	log.Print("Initializing static pages server...")
-	gwmux := runtime.NewServeMux()
+	gwMux := runtime.NewServeMux()
 
-	mux := http.NewServeMux()
-	mux.Handle("/", gwmux)
-
-	log.Print("Registering server endpoints...")
+	mainMux := http.NewServeMux()
+	mainMux.Handle("/", gwMux)
 
 	dialCreds := credentials.NewTLS(&tls.Config{ServerName: s.Address, RootCAs: certPool})
 	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(dialCreds)}
-	err = register(s, ctx, grpcServer, gwmux, s.Address, dialOptions)
+	err = register(s, ctx, grpcHandler, gwMux, s.Address, dialOptions)
 	if err != nil {
 		log.Panicf("Failed registering: %v", err)
 	}
 
-	addSwaggerUIHandlers(s, mux)
+	addSwaggerUIHandlers(s.SwaggersPath, mainMux)
 
-	log.Print("Starting to listen...")
 	conn, err := net.Listen("tcp", s.Address)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	handler := s.Middleware.Then(grpcHandlerFunc(s, grpcServer, mux))
+	mainHandler := s.Middleware.Append(gatewayMiddleware(grpcHandler)).Then(mainMux)
 
 	certificates := []tls.Certificate{s.createCertificate()}
 	tlsConfig := tls.Config{Certificates: certificates, NextProtos: []string{"h2"}}
-	srv := &http.Server{Addr: s.Address, Handler: handler, TLSConfig: &tlsConfig}
+	srv := &http.Server{Addr: s.Address, Handler: mainHandler, TLSConfig: &tlsConfig}
 
-	log.Printf("Grpc is ready on: %s", s.Address)
 	err = srv.Serve(tls.NewListener(conn, srv.TLSConfig))
 
 	if err != nil {
 		log.Panicf("ListenAndServe failed: %s", err)
 	}
+
+	log.Printf("Grpc is ready on: %s", s.Address)
+	go func() {
+		<- ctx.Done()
+		grpcHandler.Stop()
+		conn.Close()
+	}()
 
 	return
 }
@@ -95,25 +90,20 @@ func register(s Service, ctx context.Context, grpcServer *grpc.Server, gwmux *ru
 	return err
 }
 
-// grpcHandlerFunc returns an http.Handler that delegates to grpcServer on incoming gRPC
-// connections or otherHandler otherwise. Copied from cockroachdb.
-func grpcHandlerFunc(s *server, grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler := getHandler(r, grpcServer, otherHandler)
-		handler.ServeHTTP(w, r)
-	})
-}
-
-func getHandler(r *http.Request, grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
-	if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
-		return grpcServer
-	} else {
-		return otherHandler
+func gatewayMiddleware(grpcHandler http.Handler) alice.Constructor {
+	return func (handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+			if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
+				grpcHandler.ServeHTTP(w, r)
+			} else {
+				handler.ServeHTTP(w, r)
+			}
+		})
 	}
 }
 
-func addSwaggerUIHandlers(s *server, mux *http.ServeMux) {
-	if s.SwaggersPath == "" {
+func addSwaggerUIHandlers(swaggersPath string, mux *http.ServeMux) {
+	if swaggersPath == "" {
 		return
 	}
 	mime.AddExtensionType(".svg", "image/svg+xml")
@@ -125,7 +115,7 @@ func addSwaggerUIHandlers(s *server, mux *http.ServeMux) {
 	prefix := "/swagger-ui/"
 	mux.Handle(prefix, http.StripPrefix(prefix, uiServer))
 
-	path, err := filepath.Abs(s.SwaggersPath)
+	path, err := filepath.Abs(swaggersPath)
 	if err != nil {
 		log.Panic("Failed calculating absoulute path of swagger directory")
 	}

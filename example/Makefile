@@ -45,4 +45,4 @@ run-client-echo: $(CMD) certs
 	$(CMD) send --crt certs/server.pem echo hi
 
 run-rest-echo:
-	curl --insecure --cacert certs/server.pem -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{"value": "string"}' 'https://localhost:10000/v1/echo'; echo
+	curl --insecure --cacert certs/server.pem -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{"value": "hi"}' 'https://localhost:10000/v1/echo'; echo

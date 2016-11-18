@@ -6,6 +6,7 @@ import (
 	"github.com/posener/grpcgw/middleware"
 
 	"github.com/spf13/cobra"
+	"context"
 )
 
 var (
@@ -44,7 +45,7 @@ func newServeCommand(s *server) *cobra.Command {
 			if !noAPICallsLogging {
 				s.Middleware = s.Middleware.Append(middleware.APILoggerMiddleware)
 			}
-			Serve(s)
+			Serve(s, context.Background())
 		},
 	}
 }
