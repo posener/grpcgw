@@ -36,27 +36,26 @@ func NewServer(service Service) *server {
 }
 
 func Serve(s *server, ctx context.Context) {
+	s.checkSecure()
+
 	var err error
 
-	s.checkSecure()
-	certPool := s.createCertPool()
-	options := []grpc.ServerOption{grpc.Creds(credentials.NewClientTLSFromCert(certPool, s.Address))}
-	grpcHandler := grpc.NewServer(options...)
-
-	gwMux := runtime.NewServeMux()
-
 	mainMux := http.NewServeMux()
+	gwMux := runtime.NewServeMux()
 	mainMux.Handle("/", gwMux)
+
+	certPool := s.createCertPool()
 
 	dialCreds := credentials.NewTLS(&tls.Config{ServerName: s.Address, RootCAs: certPool})
 	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(dialCreds)}
-	err = register(s, ctx, grpcHandler, gwMux, s.Address, dialOptions)
+	err = s.RegisterGatewayEndpoints(ctx, gwMux, s.Address, dialOptions)
 	if err != nil {
 		log.Panicf("Failed registering: %v", err)
 	}
 
+
 	prefix := "/swagger-ui/"
-	mainMux.Handle(prefix, http.StripPrefix(prefix, handleSwaggeUI()))
+	mainMux.Handle(prefix, http.StripPrefix(prefix, handleSwaggerUI()))
 	prefix = "/swaggers/"
 	mainMux.Handle(prefix, http.StripPrefix(prefix, handleSwaggerJson(s.SwaggersPath)))
 
@@ -64,6 +63,10 @@ func Serve(s *server, ctx context.Context) {
 	if err != nil {
 		log.Panic(err)
 	}
+
+	options := []grpc.ServerOption{grpc.Creds(credentials.NewClientTLSFromCert(certPool, s.Address))}
+	grpcHandler := grpc.NewServer(options...)
+	s.RegisterGRPC(grpcHandler)
 
 	mainHandler := s.Middleware.Append(gatewayMiddleware(grpcHandler)).Then(mainMux)
 
@@ -87,12 +90,9 @@ func Serve(s *server, ctx context.Context) {
 	return
 }
 
-func register(s Service, ctx context.Context, grpcServer *grpc.Server, gwmux *runtime.ServeMux, grpcEndpointAddr string, opts []grpc.DialOption) error {
-	s.RegisterGRPC(grpcServer)
-	err := s.RegisterGatewayEndpoints(ctx, gwmux, grpcEndpointAddr, opts)
-	return err
-}
-
+// construct a gateway middleware.
+// According to the request it chooses if to use the gateway handler
+// or if to pass it on.
 func gatewayMiddleware(grpcHandler http.Handler) alice.Constructor {
 	return func (handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
@@ -105,7 +105,7 @@ func gatewayMiddleware(grpcHandler http.Handler) alice.Constructor {
 	}
 }
 
-func handleSwaggeUI() http.Handler {
+func handleSwaggerUI() http.Handler {
 	mime.AddExtensionType(".svg", "image/svg+xml")
 	return http.FileServer(&assetfs.AssetFS{
 		Asset:    Asset,
