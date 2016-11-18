@@ -10,7 +10,7 @@ func APILoggerMiddleware(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logW := newLogResponseWriter(w)
 		handler.ServeHTTP(logW, r)
-		log.Printf("API called: url=%s verb=%s status=%d length=%d", r.URL.Path, r.Method, logW.Status(), logW.ContentLength())
+		log.Printf("API called: status=%d verb=%-5s length=%-4d path=%s", logW.Status(), r.Method, logW.ContentLength(), r.URL.Path)
 	})
 }
 
