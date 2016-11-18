@@ -39,34 +39,22 @@ func Serve(s *server, ctx context.Context) {
 	s.checkSecure()
 
 	var err error
-
-	mainMux := http.NewServeMux()
-	gwMux := runtime.NewServeMux()
-	mainMux.Handle("/", gwMux)
-
 	certPool := s.createCertPool()
 
-	dialCreds := credentials.NewTLS(&tls.Config{ServerName: s.Address, RootCAs: certPool})
-	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(dialCreds)}
-	err = s.RegisterGatewayEndpoints(ctx, gwMux, s.Address, dialOptions)
-	if err != nil {
-		log.Panicf("Failed registering: %v", err)
-	}
-
+	mainMux := http.NewServeMux()
+	grpcHandler := createGrpcHandler(s, certPool)
 
 	prefix := "/swagger-ui/"
 	mainMux.Handle(prefix, http.StripPrefix(prefix, handleSwaggerUI()))
 	prefix = "/swaggers/"
 	mainMux.Handle(prefix, http.StripPrefix(prefix, handleSwaggerJson(s.SwaggersPath)))
 
+	mainMux.Handle("/", createGateway(s, ctx, certPool))
+
 	conn, err := net.Listen("tcp", s.Address)
 	if err != nil {
 		log.Panic(err)
 	}
-
-	options := []grpc.ServerOption{grpc.Creds(credentials.NewClientTLSFromCert(certPool, s.Address))}
-	grpcHandler := grpc.NewServer(options...)
-	s.RegisterGRPC(grpcHandler)
 
 	mainHandler := s.Middleware.Append(gatewayMiddleware(grpcHandler)).Then(mainMux)
 
@@ -74,7 +62,8 @@ func Serve(s *server, ctx context.Context) {
 	tlsConfig := tls.Config{Certificates: certificates, NextProtos: []string{"h2"}}
 	srv := &http.Server{Addr: s.Address, Handler: mainHandler, TLSConfig: &tlsConfig}
 
-	err = srv.Serve(tls.NewListener(conn, srv.TLSConfig))
+	listener := tls.NewListener(conn, srv.TLSConfig)
+	err = srv.Serve(listener)
 
 	if err != nil {
 		log.Panicf("ListenAndServe failed: %s", err)
@@ -85,15 +74,35 @@ func Serve(s *server, ctx context.Context) {
 		<- ctx.Done()
 		grpcHandler.Stop()
 		conn.Close()
+		listener.Close()
 	}()
 
 	return
 }
 
+func createGrpcHandler(s *server, certPool *x509.CertPool) *grpc.Server {
+	options := []grpc.ServerOption{grpc.Creds(credentials.NewClientTLSFromCert(certPool, s.Address))}
+	grpcHandler := grpc.NewServer(options...)
+	s.RegisterGRPC(grpcHandler)
+	return grpcHandler
+}
+
+func createGateway(s *server, ctx context.Context, certPool *x509.CertPool) http.Handler {
+	gwMux := runtime.NewServeMux()
+
+	dialCreds := credentials.NewTLS(&tls.Config{ServerName: s.Address, RootCAs: certPool})
+	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(dialCreds)}
+	err := s.RegisterGatewayEndpoints(ctx, gwMux, s.Address, dialOptions)
+	if err != nil {
+		log.Panicf("Failed registering: %v", err)
+	}
+	return gwMux
+}
+
 // construct a gateway middleware.
 // According to the request it chooses if to use the gateway handler
 // or if to pass it on.
-func gatewayMiddleware(grpcHandler http.Handler) alice.Constructor {
+func gatewayMiddleware(grpcHandler *grpc.Server) alice.Constructor {
 	return func (handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
 			if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
