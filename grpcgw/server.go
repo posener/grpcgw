@@ -55,7 +55,10 @@ func Serve(s *server, ctx context.Context) {
 		log.Panicf("Failed registering: %v", err)
 	}
 
-	addSwaggerUIHandlers(s.SwaggersPath, mainMux)
+	prefix := "/swagger-ui/"
+	mainMux.Handle(prefix, http.StripPrefix(prefix, handleSwaggeUI()))
+	prefix = "/swaggers/"
+	mainMux.Handle(prefix, http.StripPrefix(prefix, handleSwaggerJson(s.SwaggersPath)))
 
 	conn, err := net.Listen("tcp", s.Address)
 	if err != nil {
@@ -102,26 +105,21 @@ func gatewayMiddleware(grpcHandler http.Handler) alice.Constructor {
 	}
 }
 
-func addSwaggerUIHandlers(swaggersPath string, mux *http.ServeMux) {
-	if swaggersPath == "" {
-		return
-	}
+func handleSwaggeUI() http.Handler {
 	mime.AddExtensionType(".svg", "image/svg+xml")
-    uiServer := http.FileServer(&assetfs.AssetFS{
+	return http.FileServer(&assetfs.AssetFS{
 		Asset:    Asset,
 		AssetDir: AssetDir,
 		Prefix:   "swagger-ui",
 	})
-	prefix := "/swagger-ui/"
-	mux.Handle(prefix, http.StripPrefix(prefix, uiServer))
+}
 
+func handleSwaggerJson(swaggersPath string) http.Handler {
 	path, err := filepath.Abs(swaggersPath)
 	if err != nil {
 		log.Panic("Failed calculating absoulute path of swagger directory")
 	}
-	jsonServer := http.FileServer(http.Dir(path))
-	prefix = "/swaggers/"
-	mux.Handle(prefix, http.StripPrefix(prefix, jsonServer))
+	return http.FileServer(http.Dir(path))
 }
 
 func (s *server)checkSecure() {
